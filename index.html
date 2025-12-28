@@ -9,15 +9,36 @@
         <h1>PostMessage Messages</h1>
         <div id="messages"></div>
         <script>
+            const EXPECTED_ORIGIN = "https://your-sender.example"; // change to your sender's origin
+            const seen = new Set();
             let count = 0;
+
             window.addEventListener("message", (event) => {
+                // Filter by origin (and optionally by source)
+                if (event.origin !== EXPECTED_ORIGIN) {
+                    // Uncomment to inspect noisy senders:
+                    // console.debug("Ignoring message from", event.origin, event.data);
+                    return;
+                }
+                // Optional: ensure it came from a specific window (e.g., window.opener or window.parent)
+                // if (event.source !== window.opener && event.source !== window.parent) return;
+
+                // De-duplicate identical payloads within a short time window
+                const key = JSON.stringify(event.data);
+                if (seen.has(key)) return;
+                seen.add(key);
+                setTimeout(() => seen.delete(key), 1000); // allow same message again after 1s
+
                 count++;
                 const header = document.createElement("h3");
-                header.appendChild(document.createTextNode(`Message ${count}`));
+                header.appendChild(document.createTextNode(`Message ${count} from ${event.origin}`));
+
                 const code = document.createElement("code");
                 code.appendChild(document.createTextNode(JSON.stringify(event.data, null, 2)));
+
                 const pre = document.createElement("pre");
                 pre.appendChild(code);
+
                 document.getElementById("messages").appendChild(header);
                 document.getElementById("messages").appendChild(pre);
             });
