@@ -5,7 +5,10 @@
         <title>PostMessage Echo</title>
         <link rel="stylesheet" href="https://unpkg.com/sakura.css/css/sakura.css" />
         <style>
+            .message { margin-bottom: 1.5rem; }
+            .message img { display: block; max-width: 100%; height: auto; margin: 0.5rem 0; border-radius: 4px; }
             pre { white-space: pre-wrap; word-break: break-word; }
+            details summary { cursor: pointer; }
         </style>
     </head>
     <body>
@@ -55,33 +58,57 @@
 
                 const stableKey = makeStableKey(payload);
                 if (seen.has(stableKey)) {
-                    // Duplicate logical message; ignore
+                    // Duplicate logical message; ignore rendering the output again
                     return;
                 }
                 seen.add(stableKey);
 
                 // Render only once per unique critique_output
                 count++;
-                const header = document.createElement("h3");
-                header.appendChild(document.createTextNode(`Message ${count} (${type}) from ${origin || "unknown origin"}`));
-
-                const display = {
-                    type,
-                    data: payload?.data
-                    // metadata intentionally omitted to avoid duplicate rendering due to inconsequential differences
-                    // Uncomment to include:
-                    // metadata: payload?.metadata
-                };
-
-                const code = document.createElement("code");
-                code.appendChild(document.createTextNode(JSON.stringify(display, null, 2)));
-
-                const pre = document.createElement("pre");
-                pre.appendChild(code);
 
                 const container = document.getElementById("messages");
-                container.appendChild(header);
-                container.appendChild(pre);
+                const section = document.createElement("section");
+                section.className = "message";
+
+                const header = document.createElement("h3");
+                header.appendChild(document.createTextNode(`Message ${count} (${type}) from ${origin || "unknown origin"}`));
+                section.appendChild(header);
+
+                // 1) Show the image from metadata.inputs.url_image_base64 first
+                const imgSrc = payload?.metadata?.inputs?.url_image_base64;
+                if (typeof imgSrc === "string" && imgSrc.length > 0) {
+                    const img = document.createElement("img");
+                    img.src = imgSrc; // supports data:image/*;base64,...
+                    img.alt = `Message ${count} image`;
+                    section.appendChild(img);
+                }
+
+                // 2) Then show the output data below
+                const outputDisplay = payload?.data ?? {};
+                const outputCode = document.createElement("code");
+                outputCode.appendChild(document.createTextNode(JSON.stringify(outputDisplay, null, 2)));
+                const outputPre = document.createElement("pre");
+                outputPre.appendChild(outputCode);
+                section.appendChild(outputPre);
+
+                // Optional: keep metadata visible (collapsed)
+                const meta = payload?.metadata;
+                if (meta) {
+                    const details = document.createElement("details");
+                    const summary = document.createElement("summary");
+                    summary.textContent = "Metadata";
+                    details.appendChild(summary);
+
+                    const metaCode = document.createElement("code");
+                    metaCode.appendChild(document.createTextNode(JSON.stringify(meta, null, 2)));
+                    const metaPre = document.createElement("pre");
+                    metaPre.appendChild(metaCode);
+                    details.appendChild(metaPre);
+
+                    section.appendChild(details);
+                }
+
+                container.appendChild(section);
             });
         </script>
     </body>
