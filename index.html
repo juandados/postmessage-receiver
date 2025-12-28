@@ -4,43 +4,84 @@
         <meta charset="UTF-8" />
         <title>PostMessage Echo</title>
         <link rel="stylesheet" href="https://unpkg.com/sakura.css/css/sakura.css" />
+        <style>
+            pre { white-space: pre-wrap; word-break: break-word; }
+        </style>
     </head>
     <body>
         <h1>PostMessage Messages</h1>
         <div id="messages"></div>
         <script>
-            const EXPECTED_ORIGIN = "https://your-sender.example"; // change to your sender's origin
+            // Optionally restrict which origins are allowed (leave empty to accept all)
+            const ALLOWED_ORIGINS = new Set([]);
+
+            // Only handle messages of type "output"
+            const ALLOWED_TYPES = new Set(["output"]);
+
+            // Track messages we've already displayed (by stable content key)
             const seen = new Set();
             let count = 0;
 
+            // Build a stable key from the meaningful content of the message,
+            // ignoring metadata (e.g., base64 variations, timestamps, etc.)
+            function makeStableKey(payload) {
+                const type = payload?.type;
+
+                // Normalize critique_output to a fixed shape and key order
+                const c = payload?.data?.critique_output || {};
+                const stableCritique = {
+                    critique: c?.critique ?? "",
+                    recommendations: c?.recommendations ?? "",
+                    score: c?.score ?? ""
+                };
+
+                // If there is a critique_output, use that as the dedup basis
+                if (c && (c.critique || c.recommendations || c.score !== undefined)) {
+                    return JSON.stringify({ type, critique_output: stableCritique });
+                }
+
+                // Fallback: use type + data (but avoid metadata) if no critique_output present
+                const stableData = payload?.data ?? null;
+                return JSON.stringify({ type, data: stableData });
+            }
+
             window.addEventListener("message", (event) => {
-                // Filter by origin (and optionally by source)
-                if (event.origin !== EXPECTED_ORIGIN) {
-                    // Uncomment to inspect noisy senders:
-                    // console.debug("Ignoring message from", event.origin, event.data);
+                const origin = event.origin;
+                if (ALLOWED_ORIGINS.size > 0 && !ALLOWED_ORIGINS.has(origin)) return;
+
+                const payload = event.data;
+                const type = payload?.type;
+                if (!ALLOWED_TYPES.has(type)) return;
+
+                const stableKey = makeStableKey(payload);
+                if (seen.has(stableKey)) {
+                    // Duplicate logical message; ignore
                     return;
                 }
-                // Optional: ensure it came from a specific window (e.g., window.opener or window.parent)
-                // if (event.source !== window.opener && event.source !== window.parent) return;
+                seen.add(stableKey);
 
-                // De-duplicate identical payloads within a short time window
-                const key = JSON.stringify(event.data);
-                if (seen.has(key)) return;
-                seen.add(key);
-                setTimeout(() => seen.delete(key), 1000); // allow same message again after 1s
-
+                // Render only once per unique critique_output
                 count++;
                 const header = document.createElement("h3");
-                header.appendChild(document.createTextNode(`Message ${count} from ${event.origin}`));
+                header.appendChild(document.createTextNode(`Message ${count} (${type}) from ${origin || "unknown origin"}`));
+
+                const display = {
+                    type,
+                    data: payload?.data
+                    // metadata intentionally omitted to avoid duplicate rendering due to inconsequential differences
+                    // Uncomment to include:
+                    // metadata: payload?.metadata
+                };
 
                 const code = document.createElement("code");
-                code.appendChild(document.createTextNode(JSON.stringify(event.data, null, 2)));
+                code.appendChild(document.createTextNode(JSON.stringify(display, null, 2)));
 
                 const pre = document.createElement("pre");
                 pre.appendChild(code);
 
-                document.getElementById("messages").appendChild(header);
-                document.getElementById("messages").appendChild(pre);
+                const container = document.getElementById("messages");
+                container.appendChild(header);
+                container.appendChild(pre);
             });
         </script>
     </body>
